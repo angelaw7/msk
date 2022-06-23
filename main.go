@@ -26,7 +26,7 @@ func main() {
 	}
 
 	planetsCollection := client.Database("sample_guides").Collection("planets")
-	id, _ := primitive.ObjectIDFromHex("621ff30d2a3e781873fcb661")
+	id, _ := primitive.ObjectIDFromHex("621ff30d2a3e781873fcb621")
 	opts := options.Update().SetUpsert(true)
 
 	result, err := planetsCollection.UpdateOne(
@@ -42,4 +42,11 @@ func main() {
 		log.Fatal(err)
 	}
 
+	if result.ModifiedCount == 1 {
+		fmt.Println("Updated 1 Documents")
+	} else if result.MatchedCount == 0 {
+		fmt.Println("Inserted 1 document")
+	} else {
+		fmt.Println("No documents were inserted/updated")
+	}
 }
