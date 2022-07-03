@@ -29,8 +29,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	mskCollection := client.Database("msk").Collection("fetchjson")
+	mskCollection := client.Database("msk").Collection("newone")
 
+	fmt.Println(mskCollection)
 	// Read from JSON data
 	data, err := ioutil.ReadFile("edited_json.json")
 	if err != nil {
@@ -41,7 +42,6 @@ func main() {
 	if err != nil {
 		log.Fatal("Error during Unmarshal(): ", err)
 	}
-	// results := JSONFile["results"].([]interface{})
 
 	/** Insert results from JSON file to Mongo collection **/
 	// opts := options.InsertMany().SetOrdered(false)
@@ -61,54 +61,32 @@ func main() {
 	if err != nil {
 		log.Fatal("Error during Unmarshal(): ", err)
 	}
-
-	// Set options and filter (currently hardcoded)
+	results := newJSONFile["results"].([]interface{})
 	opts := options.Replace().SetUpsert(true)
-	filter := bson.M{"meta-data.dmp_sample_id": 23}
 
-	// Replace document if dmp_sample_id exists, else insert
-	result, err := mskCollection.ReplaceOne(ctx, filter, newJSONFile, opts)
-	if err != nil {
-		log.Fatal(err)
+	totalUpdatedCount := 0
+	totalInsertedCount := 0
+
+	// Loop through each sample and insert/update the database
+	for i := range results {
+		dmp_sample_id := results[i].(map[string]interface{})["meta-data"].(map[string]interface{})["dmp_sample_id"]
+		filter := bson.M{"meta-data.dmp_sample_id": dmp_sample_id}
+		replacement := results[i]
+
+		// Replace document if dmp_sample_id exists, else insert
+		result, err := mskCollection.ReplaceOne(ctx, filter, replacement, opts)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if result.MatchedCount != 0 {
+			totalUpdatedCount++
+		}
+		if result.UpsertedCount != 0 {
+			totalInsertedCount++
+		}
 	}
 
-	if result.MatchedCount != 0 {
-		fmt.Println("matched and replaced an existing document")
-		return
-	}
-	if result.UpsertedCount != 0 {
-		fmt.Printf("inserted a new document with ID %v\n", result.UpsertedID)
-	}
-	// opts := options.Update().SetUpsert(true)
-	// filter := bson.M{"results.meta-data.dmp_sample_id": "DUMMYSID_HERE"}
-	// result := mskCollection.FindOne(ctx, filter).Decode(&result)
-	// fmt.Println(result)
-
-	// // Use the planets collection (db.sample_guides.planets)
-	// planetsCollection := client.Database("sample_guides").Collection("planets")
-	// id, _ := primitive.ObjectIDFromHex("621ff30d2a3e781873fcb677")
-	// opts := options.Update().SetUpsert(true)
-
-	// // Call the collection.UpdateOne() method
-	// result, err := planetsCollection.UpdateOne(
-	// 	ctx,
-	// 	bson.M{"_id": id, "note": "yay"},
-	// 	bson.D{
-	// 		{"$set", bson.D{{"name", "Pluto + owo"}}},
-	// 	},
-	// 	opts,
-	// )
-
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	// // Print statements depending on what action was performed
-	// if result.ModifiedCount == 1 {
-	// 	fmt.Println("Updated 1 Documents")
-	// } else if result.MatchedCount == 0 {
-	// 	fmt.Println("Inserted 1 document")
-	// } else {
-	// 	fmt.Println("No documents were inserted/updated")
-	// }
+	fmt.Printf("matched and replaced %d existing document(s)\n", totalUpdatedCount)
+	fmt.Printf("inserted %d new document(s)\n", totalInsertedCount)
 }
