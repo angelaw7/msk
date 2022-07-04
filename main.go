@@ -29,27 +29,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	mskCollection := client.Database("msk").Collection("newone")
+	mskCollection := client.Database("msk").Collection("sample_data")
 
-	fmt.Println(mskCollection)
-	// Read from JSON data
-	data, err := ioutil.ReadFile("edited_json.json")
-	if err != nil {
-		log.Fatal(err)
-	}
-	var JSONFile map[string]interface{}
-	err = json.Unmarshal(data, &JSONFile)
-	if err != nil {
-		log.Fatal("Error during Unmarshal(): ", err)
-	}
-
-	/** Insert results from JSON file to Mongo collection **/
-	// opts := options.InsertMany().SetOrdered(false)
-	// res, err := mskCollection.InsertMany(ctx, results, opts)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// fmt.Printf("inserted docs with IDS %v\n", res.InsertedIDs)
+	// If running for the first time, uncomment this to upload all sample data
+	uploadFetchJSONFile(mskCollection, ctx)
 
 	// Read JSON file with other data
 	newData, err := ioutil.ReadFile("new_input.json")
@@ -89,4 +72,28 @@ func main() {
 
 	fmt.Printf("matched and replaced %d existing document(s)\n", totalUpdatedCount)
 	fmt.Printf("inserted %d new document(s)\n", totalInsertedCount)
+}
+
+// Function for uploading fetchjson.json for the first time
+func uploadFetchJSONFile(mskCollection *mongo.Collection, ctx context.Context) {
+
+	// Read data from fetchjson.json
+	data, err := ioutil.ReadFile("edited_json.json")
+	if err != nil {
+		log.Fatal(err)
+	}
+	var JSONFile map[string]interface{}
+	err = json.Unmarshal(data, &JSONFile)
+	if err != nil {
+		log.Fatal("Error during Unmarshal(): ", err)
+	}
+
+	// Insert results from JSON file into MongoDB
+	results := JSONFile["results"].([]interface{})
+	opts := options.InsertMany().SetOrdered(false)
+	res, err := mskCollection.InsertMany(ctx, results, opts)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("inserted docs with IDS %v\n", res.InsertedIDs)
 }
