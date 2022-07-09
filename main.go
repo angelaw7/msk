@@ -10,6 +10,8 @@ import (
 	"reflect"
 	"time"
 
+	"msk-mongo/types"
+
 	"github.com/joho/godotenv"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -18,7 +20,7 @@ import (
 )
 
 func main() {
-	// Load the .env file
+	// Loads the .env file
 	godotenv.Load()
 
 	// Setup
@@ -41,28 +43,29 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	var newJSONFile map[string]interface{}
+	var newJSONFile types.FetchJSON
 	err = json.Unmarshal(newData, &newJSONFile)
 	if err != nil {
 		log.Fatal("Error during Unmarshal(): ", err)
 	}
-	results := newJSONFile["results"].([]interface{})
+	results := newJSONFile.results
 	opts := options.FindOne().SetSort(bson.M{"last-modified": -1})
 
 	// Loop through each sample and insert/update the database
 	for i := range results {
 
-		dmp_sample_id := results[i].(map[string]interface{})["meta-data"].(map[string]interface{})["dmp_sample_id"]
+		dmp_sample_id := results[i].meta_data.dmp_sample_id
 		// dmp_sample_id := int32(results[i].(map[string]interface{})["dmp_sample_id"].(float64))
-		newSampleData := bson.M(results[i].(map[string]interface{}))
-		newSampleData["dmp_sample_id"] = dmp_sample_id
+		// newSampleData := bson.M(results[i].(map[string]interface{}))
+		newSampleData, err := bson.Marshal(results[i])
+		// newSampleData["dmp_sample_id"] = dmp_sample_id
 
 		filter := bson.M{"meta-data.dmp_sample_id": dmp_sample_id}
 		// filter := bson.M{"dmp_sample_id": dmp_sample_id}
 
 		// Replace document if dmp_sample_id exists, else insert
 		var result bson.M
-		err := mskCollection.FindOne(ctx, filter, opts).Decode(&result)
+		err = mskCollection.FindOne(ctx, filter, opts).Decode(&result)
 		if err != nil {
 			if err == mongo.ErrNoDocuments {
 				fmt.Printf("No document with dmp_sample_id %d found; inserting new document\n", dmp_sample_id)
@@ -79,10 +82,10 @@ func main() {
 
 		if !reflect.DeepEqual(newSampleData, result) {
 			// Insert here
-			fmt.Printf("Document with dmp_sample_id %d found but has changes; inserting new version\n", dmp_sample_id)
+			fmt.Printf("Document with dmp_sample_id %s found but has changes; inserting new version\n", dmp_sample_id)
 			// insertDocument(mskCollection, ctx, newSampleData)
 		} else {
-			fmt.Printf("Document with dmp_sample_id %d is the same; skipping\n", dmp_sample_id)
+			fmt.Printf("Document with dmp_sample_id %s is the same; skipping\n", dmp_sample_id)
 		}
 	}
 }
