@@ -7,16 +7,18 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"reflect"
 	"time"
 
 	"github.com/joho/godotenv"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func main() {
-	// Loads the .env file
+	// Load the .env file
 	godotenv.Load()
 
 	// Setup
@@ -29,10 +31,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	mskCollection := client.Database("msk").Collection("sample_data")
+	mskCollection := client.Database("msk").Collection("testing")
 
 	// If running for the first time, uncomment this to upload all sample data
-	uploadFetchJSONFile(mskCollection, ctx)
+	// uploadFetchJSONFile(mskCollection, ctx)
 
 	// Read JSON file with other data
 	newData, err := ioutil.ReadFile("new_input.json")
@@ -45,33 +47,44 @@ func main() {
 		log.Fatal("Error during Unmarshal(): ", err)
 	}
 	results := newJSONFile["results"].([]interface{})
-	opts := options.Replace().SetUpsert(true)
-
-	totalUpdatedCount := 0
-	totalInsertedCount := 0
+	opts := options.FindOne().SetSort(bson.M{"last-modified": -1})
 
 	// Loop through each sample and insert/update the database
 	for i := range results {
+
 		dmp_sample_id := results[i].(map[string]interface{})["meta-data"].(map[string]interface{})["dmp_sample_id"]
+		// dmp_sample_id := int32(results[i].(map[string]interface{})["dmp_sample_id"].(float64))
+		newSampleData := bson.M(results[i].(map[string]interface{}))
+		newSampleData["dmp_sample_id"] = dmp_sample_id
+
 		filter := bson.M{"meta-data.dmp_sample_id": dmp_sample_id}
-		replacement := results[i]
+		// filter := bson.M{"dmp_sample_id": dmp_sample_id}
 
 		// Replace document if dmp_sample_id exists, else insert
-		result, err := mskCollection.ReplaceOne(ctx, filter, replacement, opts)
+		var result bson.M
+		err := mskCollection.FindOne(ctx, filter, opts).Decode(&result)
 		if err != nil {
+			if err == mongo.ErrNoDocuments {
+				fmt.Printf("No document with dmp_sample_id %d found; inserting new document\n", dmp_sample_id)
+				fmt.Println("TODO: Insert new document")
+
+				// insertDocument(mskCollection, ctx, newSampleData)
+				return
+			}
 			log.Fatal(err)
 		}
 
-		if result.MatchedCount != 0 {
-			totalUpdatedCount++
-		}
-		if result.UpsertedCount != 0 {
-			totalInsertedCount++
+		delete(result, "last-modified")
+		delete(result, "_id")
+
+		if !reflect.DeepEqual(newSampleData, result) {
+			// Insert here
+			fmt.Printf("Document with dmp_sample_id %d found but has changes; inserting new version\n", dmp_sample_id)
+			// insertDocument(mskCollection, ctx, newSampleData)
+		} else {
+			fmt.Printf("Document with dmp_sample_id %d is the same; skipping\n", dmp_sample_id)
 		}
 	}
-
-	fmt.Printf("matched and replaced %d existing document(s)\n", totalUpdatedCount)
-	fmt.Printf("inserted %d new document(s)\n", totalInsertedCount)
 }
 
 // Function for uploading fetchjson.json for the first time
@@ -96,4 +109,17 @@ func uploadFetchJSONFile(mskCollection *mongo.Collection, ctx context.Context) {
 		log.Fatal(err)
 	}
 	fmt.Printf("inserted docs with IDS %v\n", res.InsertedIDs)
+}
+
+// Function for inserting a document to the database
+func insertDocument(mskCollection *mongo.Collection, ctx context.Context, newSampleData primitive.M) {
+	tm := time.Now()
+
+	newSampleData["last-modified"] = primitive.NewDateTimeFromTime(tm)
+	res, err := mskCollection.InsertOne(ctx, newSampleData)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("inserted document with ID %v\n", res.InsertedID)
+
 }
