@@ -1,3 +1,4 @@
 .env
 working.txt
 *.json
+testingdefs.go

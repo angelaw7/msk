@@ -20,23 +20,14 @@ import (
 )
 
 func main() {
-	// Loads the .env file
-	godotenv.Load()
+	collectionName := "testing"
+	fetchJSONFile := "fetch_shorter.json"
 
-	// Setup
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-
-	// Connect to database
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(os.Getenv("MONGODB_URI")))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	mskCollection := client.Database("msk").Collection("testing")
+	// Setup connection with MongoDB
+	ctx, mskCollection := mongoSetup(collectionName)
 
 	// Read JSON file with other data
-	newData, err := ioutil.ReadFile("new_input.json")
+	newData, err := ioutil.ReadFile(fetchJSONFile)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -114,4 +105,25 @@ func insertDocument(mskCollection *mongo.Collection, ctx context.Context, newSam
 		log.Fatal(err)
 	}
 	fmt.Printf("inserted document with ID %v\n", res.InsertedID)
+}
+
+// Setup connection with MongoDB
+func mongoSetup(collectionName string) (context.Context, *mongo.Collection) {
+
+	// Loads the .env file
+	godotenv.Load()
+
+	// Setup
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	// Connect to database
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(os.Getenv("MONGODB_URI")))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	mskCollection := client.Database("msk").Collection(collectionName)
+
+	return ctx, mskCollection
 }
