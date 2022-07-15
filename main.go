@@ -13,6 +13,7 @@ import (
 	"msk-mongo/types"
 
 	"github.com/joho/godotenv"
+	"github.com/nats-io/nats.go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -35,7 +36,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("here")
 
 	mskCollection := client.Database("msk").Collection(collectionName)
 
@@ -44,13 +44,36 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// read JSON into Go format
 	var newJSONFile types.FetchJSON
 	err = json.Unmarshal(newData, &newJSONFile)
 	if err != nil {
 		log.Fatal("Error during Unmarshal(): ", err)
 	}
 	newSamples := newJSONFile.Results
+
+	// // JSON -> ProtoMessage protobuf
+	// req := &protobuf.FetchJSON{}
+	// if err := protojson.Unmarshal(newData, req); err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	// // protobuf -> ProtoMessage wire-format encoding
+	// newData, err = proto.Marshal(req)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
 	opts := options.FindOne().SetSort(bson.M{"last_modified": -1})
+	insertNewChannel := "channels.insertNewChannel"
+	insertUpdateChannel := "channels.insertUpdateChannel"
+
+	// to create a connection to a nats-server:
+	nc, err := nats.Connect(nats.DefaultURL)
+	if err != nil {
+		fmt.Println(err)
+	}
 
 	// Loop through each sample and insert/update the database
 	for i := range newSamples {
@@ -67,6 +90,8 @@ func main() {
 			if err == mongo.ErrNoDocuments {
 				fmt.Printf("No document with dmp_sample_id %s found; inserting new document\n", dmp_sample_id)
 				insertDocument(mskCollection, ctx, newSample)
+				publishMessage(newSample, nc, insertNewChannel)
+
 			} else {
 				log.Fatal(err)
 			}
@@ -77,11 +102,15 @@ func main() {
 			if !reflect.DeepEqual(newSample, oldSample) {
 				fmt.Printf("Document with dmp_sample_id %s found but is different; inserting new version\n", dmp_sample_id)
 				insertDocument(mskCollection, ctx, newSample)
+				publishMessage(newSample, nc, insertUpdateChannel)
+
 			} else { // Sample is the same as most recent existing document; skip
 				fmt.Printf("Document with dmp_sample_id %s is the same; skipping\n", dmp_sample_id)
 			}
 		}
 	}
+
+	nc.Drain()
 }
 
 // Function for uploading fetchjson.json for the first time
@@ -106,6 +135,15 @@ func uploadFetchJSONFile(mskCollection *mongo.Collection, ctx context.Context) {
 		log.Fatal(err)
 	}
 	fmt.Printf("inserted docs with IDS %v\n", res.InsertedIDs)
+}
+
+func publishMessage(newSample types.Result, nc *nats.Conn, channel string) {
+	bytes, err := json.Marshal(newSample)
+	if err != nil {
+		log.Fatal(err)
+	}
+	nc.Publish(channel, bytes)
+	fmt.Println("Sent!")
 }
 
 // Function for inserting a document to the database
