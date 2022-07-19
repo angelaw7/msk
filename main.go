@@ -23,6 +23,8 @@ import (
 func main() {
 	collectionName := "testing"
 	fetchJSONFile := "fetch_shorter.json"
+	insertNewChannel := "channels.insertNewChannel"
+	insertUpdateChannel := "channels.insertUpdateChannel"
 
 	// Loads the .env file
 	godotenv.Load()
@@ -36,7 +38,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	mskCollection := client.Database("msk").Collection(collectionName)
 
 	// Read JSON file with other data
@@ -45,7 +46,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// read JSON into Go format
+	// Read JSON into Go format
 	var newJSONFile types.FetchJSON
 	err = json.Unmarshal(newData, &newJSONFile)
 	if err != nil {
@@ -53,23 +54,9 @@ func main() {
 	}
 	newSamples := newJSONFile.Results
 
-	// // JSON -> ProtoMessage protobuf
-	// req := &protobuf.FetchJSON{}
-	// if err := protojson.Unmarshal(newData, req); err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	// // protobuf -> ProtoMessage wire-format encoding
-	// newData, err = proto.Marshal(req)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
 	opts := options.FindOne().SetSort(bson.M{"last_modified": -1})
-	insertNewChannel := "channels.insertNewChannel"
-	insertUpdateChannel := "channels.insertUpdateChannel"
 
-	// to create a connection to a nats-server:
+	// Create a connection to a nats-server:
 	nc, err := nats.Connect(nats.DefaultURL)
 	if err != nil {
 		fmt.Println(err)
@@ -113,30 +100,7 @@ func main() {
 	nc.Drain()
 }
 
-// Function for uploading fetchjson.json for the first time
-func uploadFetchJSONFile(mskCollection *mongo.Collection, ctx context.Context) {
-
-	// Read data from fetchjson.json
-	data, err := ioutil.ReadFile("edited_json.json")
-	if err != nil {
-		log.Fatal(err)
-	}
-	var JSONFile map[string]interface{}
-	err = json.Unmarshal(data, &JSONFile)
-	if err != nil {
-		log.Fatal("Error during Unmarshal(): ", err)
-	}
-
-	// Insert results from JSON file into MongoDB
-	newSamples := JSONFile["results"].([]interface{})
-	opts := options.InsertMany().SetOrdered(false)
-	res, err := mskCollection.InsertMany(ctx, newSamples, opts)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("inserted docs with IDS %v\n", res.InsertedIDs)
-}
-
+// Function for publishing a message through the NATS server
 func publishMessage(newSample types.Result, nc *nats.Conn, channel string) {
 	bytes, err := json.Marshal(newSample)
 	if err != nil {

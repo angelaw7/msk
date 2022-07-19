@@ -13,6 +13,8 @@ import (
 
 func main() {
 
+	allChannels := "channels.*"
+
 	// Gets the channel to subscribe to
 	channel := os.Args[1]
 
@@ -38,42 +40,55 @@ func main() {
 	// Subscribe to channel
 	nc.Subscribe(channel, func(m *nats.Msg) {
 
-		// Read master JSON file
-		file, err := ioutil.ReadFile(filename)
-		if err != nil {
-			log.Fatal(err)
-		}
-		data := []types.Result{}
-		json.Unmarshal(file, &data)
-
 		// Read new sample data
 		newStruct := types.Result{}
 		err = json.Unmarshal(m.Data, &newStruct)
 		if err != nil {
 			log.Fatal(err)
 		}
-		dmpID := newStruct.Meta_data.Dmp_sample_id
-		_, check := idMap[dmpID]
-		fmt.Println(newStruct)
 
-		// Check whether another version of the sample is already in master JSON file
-		if check {
-			fmt.Println("Another version of this sample was uploaded already in current JSON; rewriting old one...")
-			indexOfExistingSample := idMap[dmpID]
-			data = append(data[:indexOfExistingSample], data[indexOfExistingSample+1:]...)
-		}
-		data = append(data, newStruct)
-		idMap[dmpID] = len(data) - 1
-
-		// Write the new sample data into the master JSON file
-		dataBytes, err := json.Marshal(data)
+		// Print the data
+		indentedJSON, err := json.MarshalIndent(newStruct, "", "    ")
 		if err != nil {
 			log.Fatal(err)
 		}
-		err = ioutil.WriteFile(filename, dataBytes, 0644)
-		if err != nil {
-			log.Fatal(err)
+		fmt.Println(string(indentedJSON))
+
+		// Write to master JSON if sub is channels.*
+		if channel == allChannels {
+
+			// Read master JSON
+			file, err := ioutil.ReadFile(filename)
+			if err != nil {
+				log.Fatal(err)
+			}
+			data := []types.Result{}
+			json.Unmarshal(file, &data)
+
+			// Sample data ID and check if in map
+			dmpID := newStruct.Meta_data.Dmp_sample_id
+			_, check := idMap[dmpID]
+
+			// Check whether another version of the sample is already in master JSON file
+			if check {
+				fmt.Println("Another version of this sample was uploaded already in current JSON; rewriting old one...")
+				indexOfExistingSample := idMap[dmpID]
+				data = append(data[:indexOfExistingSample], data[indexOfExistingSample+1:]...)
+			}
+			data = append(data, newStruct)
+			idMap[dmpID] = len(data) - 1
+
+			// Write the new sample data into the master JSON file
+			dataBytes, err := json.Marshal(data)
+			if err != nil {
+				log.Fatal(err)
+			}
+			err = ioutil.WriteFile(filename, dataBytes, 0644)
+			if err != nil {
+				log.Fatal(err)
+			}
 		}
+
 	})
 
 	fmt.Println("Subscribed to", channel)
