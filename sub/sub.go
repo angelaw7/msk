@@ -15,14 +15,12 @@ import (
 func main() {
 
 	allChannels := "channels.*"
+	filename := "sub.json"
 
 	// Gets the channel to subscribe to
 	channel := os.Args[1]
 
-	// Master JSON file to read/write to
-	filename := "sub.json"
-
-	// Quick check that the file exists
+	// Check that the file exists
 	err := checkFile(filename)
 	if err != nil {
 		log.Fatal(err)

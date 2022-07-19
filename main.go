@@ -55,8 +55,8 @@ func main() {
 	if err != nil {
 		log.Fatal("Error during Unmarshal(): ", err)
 	}
-	newSamples := newJSONFile.Results
 
+	newSamples := newJSONFile.Results
 	opts := options.FindOne().SetSort(bson.M{"last_modified": -1})
 
 	// Create a connection to a nats-server:
@@ -68,26 +68,6 @@ func main() {
 	// Loop through each sample and insert/update the database
 	for i := range newSamples {
 		newSample := newSamples[i]
-
-		newSampleNoDate := newSample
-		newSampleNoDate.Last_modified = ""
-		newSampleBytes, err := json.Marshal(newSampleNoDate)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		protoJSON := &msk_protobuf.Result{}
-		err = protojson.Unmarshal(newSampleBytes, protoJSON)
-
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		data, err := proto.Marshal(protoJSON)
-		if err != nil {
-			log.Fatal(err)
-		}
-
 		dmp_sample_id := newSample.Meta_data.Dmp_sample_id
 		filter := bson.M{"meta_data.dmp_sample_id": dmp_sample_id}
 
@@ -100,8 +80,7 @@ func main() {
 			if err == mongo.ErrNoDocuments {
 				fmt.Printf("No document with dmp_sample_id %s found; inserting new document\n", dmp_sample_id)
 				insertDocument(mskCollection, ctx, newSample)
-				// publishMessage(newSample, nc, insertNewChannel)
-				publishMessage(data, nc, insertNewChannel)
+				publishMessage(newSample, nc, insertNewChannel)
 
 			} else {
 				log.Fatal(err)
@@ -113,12 +92,10 @@ func main() {
 			if !reflect.DeepEqual(newSample, oldSample) {
 				fmt.Printf("Document with dmp_sample_id %s found but is different; inserting new version\n", dmp_sample_id)
 				insertDocument(mskCollection, ctx, newSample)
-				// publishMessage(newSample, nc, insertUpdateChannel)
-				publishMessage(data, nc, insertUpdateChannel)
+				publishMessage(newSample, nc, insertUpdateChannel)
 
 			} else { // Sample is the same as most recent existing document; skip
 				fmt.Printf("Document with dmp_sample_id %s is the same; skipping\n", dmp_sample_id)
-				publishMessage(data, nc, insertUpdateChannel)
 			}
 		}
 	}
@@ -127,20 +104,40 @@ func main() {
 }
 
 // Function for publishing a message through the NATS server
-func publishMessage(newSample []byte, nc *nats.Conn, channel string) {
-	// bytes, err := json.Marshal(newSample)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	nc.Publish(channel, newSample)
+func publishMessage(newSample types.Result, nc *nats.Conn, channel string) {
+
+	// Result struct -> JSON
+	newSampleBytes, err := json.Marshal(newSample)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// JSON -> ProtoMessage
+	protoJSON := &msk_protobuf.Result{}
+	err = protojson.Unmarshal(newSampleBytes, protoJSON)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// ProtoMessage -> []byte
+	protoData, err := proto.Marshal(protoJSON)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Send bytes through channel
+	nc.Publish(channel, protoData)
 	fmt.Println("Sent!")
 }
 
 // Function for inserting a document to the database
 func insertDocument(mskCollection *mongo.Collection, ctx context.Context, newSampleData types.Result) {
-	tm := time.Now()
 
+	// Add last_modified field to the current time
+	tm := time.Now()
 	newSampleData.Last_modified = primitive.NewDateTimeFromTime(tm)
+
+	// Insert document into databse
 	res, err := mskCollection.InsertOne(ctx, newSampleData)
 	if err != nil {
 		log.Fatal(err)
