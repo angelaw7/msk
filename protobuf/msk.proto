@@ -18,6 +18,7 @@ message Result {
     repeated CnvIntragenicVariants cnv_intragenic_variants = 6 [json_name = "cnv-intragenic-variants"]; 
     repeated SvVariants sv_variants = 7 [json_name = "sv-variants"];
     repeated Snp snp_indel_exonic_np = 8 [json_name = "snp-indel-exonic-np"];
+    
 }
 
 message Snp {

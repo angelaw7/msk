@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"msk-mongo/types"
+	msk_protobuf "msk-mongo/protobuf"
 	"os"
 
 	"github.com/nats-io/nats.go"
+	"google.golang.org/protobuf/proto"
 )
 
 func main() {
@@ -40,19 +41,13 @@ func main() {
 	// Subscribe to channel
 	nc.Subscribe(channel, func(m *nats.Msg) {
 
-		// Read new sample data
-		newStruct := types.Result{}
-		err = json.Unmarshal(m.Data, &newStruct)
+		// Read amd print the data
+		newStruct := &msk_protobuf.Result{}
+		err = proto.Unmarshal(m.Data, newStruct)
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		// Print the data
-		indentedJSON, err := json.MarshalIndent(newStruct, "", "    ")
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Println(string(indentedJSON))
+		fmt.Println(newStruct)
 
 		// Write to master JSON if sub is channels.*
 		if channel == allChannels {
@@ -62,11 +57,11 @@ func main() {
 			if err != nil {
 				log.Fatal(err)
 			}
-			data := []types.Result{}
+			data := []msk_protobuf.Result{}
 			json.Unmarshal(file, &data)
 
 			// Sample data ID and check if in map
-			dmpID := newStruct.Meta_data.Dmp_sample_id
+			dmpID := newStruct.MetaData.DmpSampleId
 			_, check := idMap[dmpID]
 
 			// Check whether another version of the sample is already in master JSON file
@@ -75,7 +70,7 @@ func main() {
 				indexOfExistingSample := idMap[dmpID]
 				data = append(data[:indexOfExistingSample], data[indexOfExistingSample+1:]...)
 			}
-			data = append(data, newStruct)
+			data = append(data, *newStruct)
 			idMap[dmpID] = len(data) - 1
 
 			// Write the new sample data into the master JSON file

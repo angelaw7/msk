@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"time"
 
+	msk_protobuf "msk-mongo/protobuf"
 	"msk-mongo/types"
 
 	"github.com/joho/godotenv"
@@ -18,6 +19,8 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 func main() {
@@ -65,6 +68,26 @@ func main() {
 	// Loop through each sample and insert/update the database
 	for i := range newSamples {
 		newSample := newSamples[i]
+
+		newSampleNoDate := newSample
+		newSampleNoDate.Last_modified = ""
+		newSampleBytes, err := json.Marshal(newSampleNoDate)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		protoJSON := &msk_protobuf.Result{}
+		err = protojson.Unmarshal(newSampleBytes, protoJSON)
+
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		data, err := proto.Marshal(protoJSON)
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		dmp_sample_id := newSample.Meta_data.Dmp_sample_id
 		filter := bson.M{"meta_data.dmp_sample_id": dmp_sample_id}
 
@@ -77,7 +100,8 @@ func main() {
 			if err == mongo.ErrNoDocuments {
 				fmt.Printf("No document with dmp_sample_id %s found; inserting new document\n", dmp_sample_id)
 				insertDocument(mskCollection, ctx, newSample)
-				publishMessage(newSample, nc, insertNewChannel)
+				// publishMessage(newSample, nc, insertNewChannel)
+				publishMessage(data, nc, insertNewChannel)
 
 			} else {
 				log.Fatal(err)
@@ -89,10 +113,12 @@ func main() {
 			if !reflect.DeepEqual(newSample, oldSample) {
 				fmt.Printf("Document with dmp_sample_id %s found but is different; inserting new version\n", dmp_sample_id)
 				insertDocument(mskCollection, ctx, newSample)
-				publishMessage(newSample, nc, insertUpdateChannel)
+				// publishMessage(newSample, nc, insertUpdateChannel)
+				publishMessage(data, nc, insertUpdateChannel)
 
 			} else { // Sample is the same as most recent existing document; skip
 				fmt.Printf("Document with dmp_sample_id %s is the same; skipping\n", dmp_sample_id)
+				publishMessage(data, nc, insertUpdateChannel)
 			}
 		}
 	}
@@ -101,12 +127,12 @@ func main() {
 }
 
 // Function for publishing a message through the NATS server
-func publishMessage(newSample types.Result, nc *nats.Conn, channel string) {
-	bytes, err := json.Marshal(newSample)
-	if err != nil {
-		log.Fatal(err)
-	}
-	nc.Publish(channel, bytes)
+func publishMessage(newSample []byte, nc *nats.Conn, channel string) {
+	// bytes, err := json.Marshal(newSample)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	nc.Publish(channel, newSample)
 	fmt.Println("Sent!")
 }
 
