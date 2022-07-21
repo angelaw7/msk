@@ -10,8 +10,8 @@ import (
 	"reflect"
 	"time"
 
-	msk_protobuf "msk-mongo/protobuf"
-	"msk-mongo/types"
+	msk_protobuf "msk-pub/protobuf"
+	"msk-pub/types"
 
 	"github.com/joho/godotenv"
 	"github.com/nats-io/nats.go"
@@ -28,6 +28,7 @@ func main() {
 	fetchJSONFile := "fetch_shorter.json"
 	insertNewChannel := "channels.insertNewChannel"
 	insertUpdateChannel := "channels.insertUpdateChannel"
+	natsServer := "nats://localhost:4222"
 
 	// Loads the .env file
 	godotenv.Load()
@@ -60,9 +61,9 @@ func main() {
 	opts := options.FindOne().SetSort(bson.M{"last_modified": -1})
 
 	// Create a connection to a nats-server:
-	nc, err := nats.Connect(nats.DefaultURL)
+	nc, err := nats.Connect(natsServer)
 	if err != nil {
-		fmt.Println(err)
+		log.Fatalln(err)
 	}
 
 	// Loop through each sample and insert/update the database
@@ -96,6 +97,8 @@ func main() {
 
 			} else { // Sample is the same as most recent existing document; skip
 				fmt.Printf("Document with dmp_sample_id %s is the same; skipping\n", dmp_sample_id)
+				publishMessage(newSample, nc, insertNewChannel)
+
 			}
 		}
 	}

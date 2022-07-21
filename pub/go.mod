@@ -1,4 +1,4 @@
-module msk-mongo
+module msk-pub
 
 go 1.18
 

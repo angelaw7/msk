@@ -1,8 +1,0 @@
-version: "3.8"
-
-services:
-  nats:
-    container_name: nats
-    image: nats:2.7.0-alpine
-    ports:
-      - 4222:4222

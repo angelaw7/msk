@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	msk_protobuf "msk-mongo/protobuf"
+	msk_protobuf "msk-sub/protobuf"
 	"os"
 
 	"github.com/nats-io/nats.go"
@@ -16,21 +16,33 @@ func main() {
 
 	allChannels := "channels.*"
 	filename := "sub.json"
+	natsServer := "nats://localhost:4222"
 
 	// Gets the channel to subscribe to
+	if len(os.Args) != 2 {
+		log.Fatalln("Need exactly 1 argument")
+	}
 	channel := os.Args[1]
 
 	// Check that the file exists
-	err := checkFile(filename)
-	if err != nil {
-		log.Fatal(err)
+	if channel == allChannels {
+		err := checkFile(filename)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
-	// Set up connection to NATS server
+	// Set up connection to NATS serverv
+	var nc *nats.Conn
+	var err error
 	wait := make(chan bool)
-	nc, err := nats.Connect(nats.DefaultURL)
-	if err != nil {
-		fmt.Println(err)
+	for {
+		nc, err = nats.Connect(natsServer)
+		if err != nil {
+			fmt.Println("Attempting to connect to server")
+		} else {
+			break
+		}
 	}
 
 	// Create hashmap for the sample IDs that have been inserted into master JSON
@@ -88,13 +100,19 @@ func main() {
 	<-wait
 }
 
-// Function to check that the master JSON file name exits; creates new file if not
+// Function to check that the master JSON file name exits;
+// Deletes contents if it exits and creates new file if not
 func checkFile(filename string) error {
 	_, err := os.Stat(filename)
 	if os.IsNotExist(err) {
 		_, err := os.Create(filename)
 		if err != nil {
-			return err
+			log.Fatalln(err)
+		}
+	} else {
+		err := os.Truncate(filename, 0)
+		if err != nil {
+			log.Fatalln(err)
 		}
 	}
 	return nil
