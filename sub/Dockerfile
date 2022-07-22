@@ -10,8 +10,9 @@ COPY go.sum ./
 
 RUN go mod download
 
-COPY sub.go ./
+COPY main.go ./
 
 RUN go build -o /sub
 
-ENTRYPOINT [ "/sub", "channels.*"]
+RUN echo "$channel"
+ENTRYPOINT [ "/sub" ]

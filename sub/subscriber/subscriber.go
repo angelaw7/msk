@@ -1,4 +1,4 @@
-package main
+package subscriber
 
 import (
 	"encoding/json"
@@ -12,21 +12,13 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func main() {
+func SubscriberMain(masterJSONFile string, channel string, natsServer string) {
 
 	allChannels := "channels.*"
-	filename := "sub.json"
-	natsServer := "nats://localhost:4222"
-
-	// Gets the channel to subscribe to
-	if len(os.Args) != 2 {
-		log.Fatalln("Need exactly 1 argument")
-	}
-	channel := os.Args[1]
 
 	// Check that the file exists
 	if channel == allChannels {
-		err := checkFile(filename)
+		err := checkFile(masterJSONFile)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -63,7 +55,7 @@ func main() {
 		if channel == allChannels {
 
 			// Read master JSON
-			file, err := ioutil.ReadFile(filename)
+			file, err := ioutil.ReadFile(masterJSONFile)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -88,7 +80,7 @@ func main() {
 			if err != nil {
 				log.Fatal(err)
 			}
-			err = ioutil.WriteFile(filename, dataBytes, 0644)
+			err = ioutil.WriteFile(masterJSONFile, dataBytes, 0644)
 			if err != nil {
 				log.Fatal(err)
 			}

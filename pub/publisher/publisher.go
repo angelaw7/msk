@@ -1,4 +1,4 @@
-package main
+package publisher
 
 import (
 	"context"
@@ -6,14 +6,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"os"
+	msk_protobuf "msk-pub/protobuf"
+	"msk-pub/types"
 	"reflect"
 	"time"
 
-	msk_protobuf "msk-pub/protobuf"
-	"msk-pub/types"
-
-	"github.com/joho/godotenv"
 	"github.com/nats-io/nats.go"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -23,26 +20,18 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func main() {
-	collectionName := "testing"
-	fetchJSONFile := "fetch_shorter.json"
-	insertNewChannel := "channels.insertNewChannel"
-	insertUpdateChannel := "channels.insertUpdateChannel"
-	natsServer := "nats://localhost:4222"
-
-	// Loads the .env file
-	godotenv.Load()
+func PublisherMain(mongoURI string, databaseName string, collectionName string, fetchJSONFile string, newSamplesChannel string, updateSamplesChannel string, natsServer string) {
 
 	// Setup connection with MongoDB
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	// Connect to database
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(os.Getenv("MONGODB_URI")))
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoURI))
 	if err != nil {
 		log.Fatal(err)
 	}
-	mskCollection := client.Database("msk").Collection(collectionName)
+	mskCollection := client.Database(databaseName).Collection(collectionName)
 
 	// Read JSON file with other data
 	newData, err := ioutil.ReadFile(fetchJSONFile)
@@ -81,7 +70,7 @@ func main() {
 			if err == mongo.ErrNoDocuments {
 				fmt.Printf("No document with dmp_sample_id %s found; inserting new document\n", dmp_sample_id)
 				insertDocument(mskCollection, ctx, newSample)
-				publishMessage(newSample, nc, insertNewChannel)
+				publishMessage(newSample, nc, newSamplesChannel)
 
 			} else {
 				log.Fatal(err)
@@ -93,11 +82,11 @@ func main() {
 			if !reflect.DeepEqual(newSample, oldSample) {
 				fmt.Printf("Document with dmp_sample_id %s found but is different; inserting new version\n", dmp_sample_id)
 				insertDocument(mskCollection, ctx, newSample)
-				publishMessage(newSample, nc, insertUpdateChannel)
+				publishMessage(newSample, nc, updateSamplesChannel)
 
 			} else { // Sample is the same as most recent existing document; skip
 				fmt.Printf("Document with dmp_sample_id %s is the same; skipping\n", dmp_sample_id)
-				publishMessage(newSample, nc, insertNewChannel)
+				publishMessage(newSample, nc, newSamplesChannel)
 
 			}
 		}
