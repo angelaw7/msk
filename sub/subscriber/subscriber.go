@@ -12,9 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func SubscriberMain(masterJSONFile string, channel string, natsServer string) {
-
-	allChannels := "channels.*"
+func SubscriberMain(masterJSONFile string, channel string, allChannels string, natsServer string) {
 
 	// Check that the file exists
 	if channel == allChannels {
