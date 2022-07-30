@@ -54,3 +54,14 @@ func ReadSampleData(fetchJSONFile string) []types.Result {
 
 	return newSamples
 }
+
+func WriteTesting(data types.Result, file string) {
+	dataBytes, err := json.Marshal(data)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = ioutil.WriteFile(file, dataBytes, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+}

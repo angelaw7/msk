@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	genome "msk-sub/genome"
 	msk_protobuf "msk-sub/protobuf"
 	"os"
 
 	"github.com/nats-io/nats.go"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -54,12 +56,19 @@ func DeserializeAndPrintData(message *nats.Msg) *msk_protobuf.Result {
 	if err != nil {
 		log.Fatal(err)
 	}
-	prettyPrint, err := json.MarshalIndent(newStruct, "", "    ")
-	if err != nil {
-		fmt.Println(newStruct)
-	} else {
-		fmt.Println(string(prettyPrint))
+
+	var data []byte
+	marshalOpts := protojson.MarshalOptions{
+		Indent:          "    ",
+		EmitUnpopulated: true,
+		UseProtoNames:   true,
 	}
+	data, err = marshalOpts.Marshal(newStruct)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(string(data))
+
 	return newStruct
 }
 
@@ -77,27 +86,47 @@ func ReadMasterJSON(masterJSONFile string) []msk_protobuf.Result {
 }
 
 // Add sample if it is new, else update the existing one
-func AddOrUpdateSample(sampleExistsInFile bool, idMap map[string]int, dmpID string, data []msk_protobuf.Result, newStruct *msk_protobuf.Result) ([]msk_protobuf.Result, map[string]int) {
+func AddOrUpdateSample(idMap map[string]int, dmpID string, JSONData []msk_protobuf.Result, newStruct *msk_protobuf.Result) ([]byte, map[string]int) {
+	_, sampleExistsInFile := idMap[dmpID]
+	
 	// Check whether another version of the sample is already in master JSON file
 	if sampleExistsInFile {
 		fmt.Println("Another version of this sample was already in JSON file and was rewritten")
 		indexOfExistingSample := idMap[dmpID]
-		data = append(data[:indexOfExistingSample], data[indexOfExistingSample+1:]...)
+		JSONData = append(JSONData[:indexOfExistingSample], JSONData[indexOfExistingSample+1:]...)
 	} else {
 		fmt.Println("Sample added to JSON file")
 	}
-	data = append(data, *newStruct)
-	idMap[dmpID] = len(data) - 1
+	JSONData = append(JSONData, *newStruct)
+	idMap[dmpID] = len(JSONData) - 1
+
+	marshalOpts := protojson.MarshalOptions{
+		Indent:          "    ",
+		EmitUnpopulated: true,
+		UseProtoNames:   true,
+	}
+	data, err := marshalOpts.Marshal(newStruct)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	return data, idMap
 }
 
 // Write the new sample data into the master JSON file
-func WriteToMasterJSON(data []msk_protobuf.Result, masterJSONFile string) {
+func WriteToMasterJSON(data []byte, masterJSONFile string) {
+	err := ioutil.WriteFile(masterJSONFile, data, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func WriteToGenomeJSON(data []genome.Genome, genomeFile string) {
 	dataBytes, err := json.Marshal(data)
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = ioutil.WriteFile(masterJSONFile, dataBytes, 0644)
+	err = ioutil.WriteFile(genomeFile, dataBytes, 0644)
 	if err != nil {
 		log.Fatal(err)
 	}

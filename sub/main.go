@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"msk-sub/genome"
 	"msk-sub/server"
 	"msk-sub/utils"
 
@@ -24,25 +25,30 @@ func main() {
 	// Create hashmap for the sample IDs that have been inserted into master JSON
 	idMap := map[string]int{}
 
+	// Send an API call to get data from Genome Nexus and write to JSON
+	variants := []string{"1:g.182712A>C", "2:g.265023C>T", "3:g.319781del", "19:g.110753dup", "1:g.1385015_1387562del"}
+	genomeData := genome.GetGenomeData(variants)
+	utils.WriteToGenomeJSON(genomeData, "genomeData.json")
+
 	// Subscribe to channel
 	nc.Subscribe(channel, func(message *nats.Msg) {
 
 		// Deseralize and print the data
-		newStruct := utils.DeserializeAndPrintData(message)
+		sampleResult := utils.DeserializeAndPrintData(message)
 
 		// Write to master JSON if sub is channels.*
 		if channel == allChannels {
-			dmpID := newStruct.MetaData.DmpSampleId
+			dmpID := sampleResult.MetaData.DmpSampleId
 
 			// Read master JSON file
-			data := utils.ReadMasterJSON(masterJSONFile)
+			oldJSONData := utils.ReadMasterJSON(masterJSONFile)
 
 			// Add sample to JSON or update sample in JSON
-			_, sampleExistsInFile := idMap[dmpID]
-			data, idMap = utils.AddOrUpdateSample(sampleExistsInFile, idMap, dmpID, data, newStruct)
+			var newJSONData []byte
+			newJSONData, idMap = utils.AddOrUpdateSample(idMap, dmpID, oldJSONData, sampleResult)
 
 			// Write the new sample data into the master JSON file
-			utils.WriteToMasterJSON(data, masterJSONFile)
+			utils.WriteToMasterJSON(newJSONData, masterJSONFile)
 		}
 	})
 
